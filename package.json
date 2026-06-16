@@ -1,0 +1,21 @@
+{
+  "name": "collabrix",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Real-time collaborative coding, interview, contest, video, AI feedback, and GitHub workspace.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @collabrix/api & npm run dev --workspace @collabrix/web",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace @collabrix/db",
+    "db:migrate": "npm run db:migrate --workspace @collabrix/db"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

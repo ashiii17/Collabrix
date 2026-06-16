@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoomMode {
+  collaboration
+  interview
+  contest
+}
+
+enum RoomRole {
+  owner
+  interviewer
+  candidate
+  participant
+}
+
+enum RoomStatus {
+  active
+  paused
+  completed
+  archived
+}
+
+enum Language {
+  python
+  javascript
+  java
+  cpp
+}
+
+enum MessageKind {
+  text
+  code
+  file
+}
+
+enum ReplayEventType {
+  user_joined
+  user_left
+  code_changed
+  code_executed
+  chat_sent
+  solution_submitted
+  whiteboard_changed
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String
+  passwordHash  String
+  avatarUrl     String?
+  githubId      String?        @unique
+  githubLogin   String?
+  bio           String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  ownedRooms    Room[]         @relation("RoomOwner")
+  memberships   RoomMember[]
+  messages      ChatMessage[]
+  submissions   Submission[]
+  activity      ActivityEvent[]
+  aiReviews     AiReview[]
+}
+
+model Room {
+  id              String         @id @default(cuid())
+  slug            String         @unique
+  name            String
+  mode            RoomMode       @default(collaboration)
+  status          RoomStatus     @default(active)
+  language        Language       @default(javascript)
+  code            String         @default("")
+  version         Int            @default(0)
+  problemTitle    String?
+  problemBody     String?
+  startsAt        DateTime?
+  endsAt          DateTime?
+  ownerId         String
+  owner           User           @relation("RoomOwner", fields: [ownerId], references: [id])
+  members         RoomMember[]
+  messages        ChatMessage[]
+  replayEvents    ReplayEvent[]
+  executions      CodeExecution[]
+  submissions     Submission[]
+  whiteboardState Json?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model RoomMember {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  role      RoomRole @default(participant)
+  joinedAt  DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+}
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  roomId    String
+  userId    String
+  body      String
+  kind      MessageKind @default(text)
+  createdAt DateTime    @default(now())
+  room      Room        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ReplayEvent {
+  id        String          @id @default(cuid())
+  roomId    String
+  userId    String?
+  type      ReplayEventType
+  payload   Json
+  sequence  Int
+  createdAt DateTime        @default(now())
+  room      Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, sequence])
+}
+
+model CodeExecution {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  language  Language
+  code      String
+  stdin     String
+  stdout    String
+  stderr    String
+  exitCode  Int
+  durationMs Int
+  createdAt DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+model Submission {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  code      String
+  language  Language
+  score     Float?
+  feedback  Json?
+  createdAt DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AiReview {
+  id        String   @id @default(cuid())
+  userId    String
+  subject   String
+  input     Json
+  output    Json
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Contest {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime
+  problems    Json
+  createdAt   DateTime @default(now())
+}
+
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  metadata  Json
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
