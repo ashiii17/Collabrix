@@ -33,45 +33,50 @@ export default function ProfilePage() {
     return p.avatarUrl.startsWith("/") ? `${API_URL}${p.avatarUrl}` : p.avatarUrl;
   }
 
-  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [removeAvatar, setRemoveAvatar] = useState(false);
+
+  function handleAvatarSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFormError(""); setSuccess("");
-    const form = new FormData();
-    form.append("avatar", file);
-    try {
-      const res = await fetch(`${API_URL}/auth/avatar`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${getToken()}` },
-        body: form,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      setProfile(data.user);
-      setSuccess("Avatar updated.");
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Upload failed");
-    }
+    setPendingFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setRemoveAvatar(false);
   }
 
-  async function handleRemoveAvatar() {
-    setFormError(""); setSuccess("");
-    try {
-      const r = await api<{ user: Profile }>("/auth/profile", {
-        method: "PATCH",
-        body: JSON.stringify({ avatarUrl: "" }),
-      });
-      setProfile(r.user);
-      setSuccess("Avatar removed.");
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Failed to remove avatar");
-    }
+  function handleRemoveAvatar() {
+    setPendingFile(null);
+    setPreviewUrl(null);
+    setRemoveAvatar(true);
   }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true); setFormError(""); setSuccess("");
     try {
+      // Upload avatar file if selected
+      if (pendingFile) {
+        const form = new FormData();
+        form.append("avatar", pendingFile);
+        const res = await fetch(`${API_URL}/auth/avatar`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${getToken()}` },
+          body: form,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Upload failed");
+        setProfile(data.user);
+      }
+      // Remove avatar if requested
+      if (removeAvatar) {
+        const r = await api<{ user: Profile }>("/auth/profile", {
+          method: "PATCH",
+          body: JSON.stringify({ avatarUrl: "" }),
+        });
+        setProfile(r.user);
+      }
+      // Update name
       const r = await api<{ user: Profile }>("/auth/profile", {
         method: "PATCH",
         body: JSON.stringify({ name }),
@@ -79,6 +84,9 @@ export default function ProfilePage() {
       setProfile(r.user);
       setSuccess("Profile updated.");
       setEditing(false);
+      setPendingFile(null);
+      setPreviewUrl(null);
+      setRemoveAvatar(false);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Update failed");
     } finally { setSaving(false); }
@@ -94,21 +102,24 @@ export default function ProfilePage() {
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
           <div className="flex flex-col items-center gap-2">
             <div className="relative group">
-            {avatarSrc(profile) ? (
-              <img src={avatarSrc(profile)!} alt="Avatar" className="h-20 w-20 rounded-full object-cover" />
-            ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-500 text-2xl font-bold text-white">
-                {profile.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
-              </div>
-            )}
+            {(() => {
+              const src = previewUrl || (!removeAvatar ? avatarSrc(profile) : null);
+              return src ? (
+                <img src={src} alt="Avatar" className="h-20 w-20 rounded-full object-cover" />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-500 text-2xl font-bold text-white">
+                  {profile.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                </div>
+              );
+            })()}
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
               className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity"
             >Change</button>
-            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleAvatarUpload} />
+            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleAvatarSelect} />
           </div>
-          {editing && avatarSrc(profile) && (
+          {editing && (previewUrl || avatarSrc(profile)) && !removeAvatar && (
             <button type="button" onClick={handleRemoveAvatar} className="text-xs text-red-500 hover:text-red-700">Remove photo</button>
           )}
           </div>
@@ -132,7 +143,7 @@ export default function ProfilePage() {
             </div>
             <div className="flex gap-3">
               <Button className="flex-1" type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-              <button type="button" onClick={() => { setEditing(false); setName(profile.name); setFormError(""); }} className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={() => { setEditing(false); setName(profile.name); setFormError(""); setPendingFile(null); setPreviewUrl(null); setRemoveAvatar(false); }} className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Cancel</button>
             </div>
           </form>
         )}
