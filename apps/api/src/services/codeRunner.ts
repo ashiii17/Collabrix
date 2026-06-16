@@ -6,9 +6,10 @@ import { join } from "node:path";
 import type { CodeExecutionInput } from "@collabrix/shared";
 import { env } from "../config/env.js";
 
-const images = {
+const images: Record<string, string> = {
   python: "python:3.12-alpine",
   javascript: "node:22-alpine",
+  typescript: "node:22-alpine",
   java: "eclipse-temurin:21-alpine",
   cpp: "gcc:14"
 };

@@ -8,61 +8,44 @@ export const roomsRouter = Router();
 
 roomsRouter.use(requireAuth);
 
+// List rooms owned by user
 roomsRouter.get("/", async (req, res) => {
   const rooms = await prisma.room.findMany({
-    where: { members: { some: { userId: req.user!.id } } },
-    include: { members: { include: { user: true } } },
-    orderBy: { updatedAt: "desc" }
+    where: { ownerId: req.user!.id },
+    select: { id: true, slug: true, name: true, language: true, createdAt: true, updatedAt: true },
+    orderBy: { createdAt: "desc" },
   });
   res.json({ rooms });
 });
 
+// Create room
 roomsRouter.post("/", async (req, res) => {
-  const input = createRoomSchema.parse(req.body);
+  const parsed = createRoomSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid input", issues: parsed.error.flatten().fieldErrors });
+  }
   const room = await prisma.room.create({
     data: {
       slug: nanoid(8),
-      name: input.name,
-      mode: input.mode,
-      language: input.language,
+      name: parsed.data.name,
+      language: parsed.data.language,
+      mode: parsed.data.mode,
       ownerId: req.user!.id,
-      code: defaultCode(input.language),
-      members: { create: { userId: req.user!.id, role: "owner" } }
-    }
+    },
+    select: { id: true, slug: true, name: true, language: true, createdAt: true, updatedAt: true },
   });
   res.status(201).json({ room });
 });
 
-roomsRouter.get("/:slug", async (req, res) => {
+// Get room by roomCode (slug)
+roomsRouter.get("/:roomCode", async (req, res) => {
   const room = await prisma.room.findUnique({
-    where: { slug: req.params.slug },
-    include: {
-      members: { include: { user: true } },
-      messages: { include: { user: true }, orderBy: { createdAt: "asc" }, take: 100 },
-      replayEvents: { orderBy: { sequence: "asc" }, take: 250 }
-    }
+    where: { slug: req.params.roomCode },
+    select: {
+      id: true, slug: true, name: true, language: true, createdAt: true, updatedAt: true,
+      owner: { select: { id: true, name: true, email: true, avatarUrl: true } },
+    },
   });
-
   if (!room) return res.status(404).json({ error: "Room not found" });
   res.json({ room });
 });
-
-roomsRouter.post("/:slug/join", async (req, res) => {
-  const room = await prisma.room.findUnique({ where: { slug: req.params.slug } });
-  if (!room) return res.status(404).json({ error: "Room not found" });
-
-  await prisma.roomMember.upsert({
-    where: { roomId_userId: { roomId: room.id, userId: req.user!.id } },
-    create: { roomId: room.id, userId: req.user!.id, role: "participant" },
-    update: {}
-  });
-
-  res.json({ room });
-});
-
-function defaultCode(language: string) {
-  if (language === "python") return "print('Hello from Collabrix')\n";
-  if (language === "java") return "class Main {\n  public static void main(String[] args) {\n    System.out.println(\"Hello from Collabrix\");\n  }\n}\n";
-  if (language === "cpp") return "#include <iostream>\nint main() {\n  std::cout << \"Hello from Collabrix\\n\";\n}\n";
-  return "console.log('Hello from Collabrix');\n";
-}

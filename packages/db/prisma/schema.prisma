@@ -30,6 +30,7 @@ enum RoomStatus {
 enum Language {
   python
   javascript
+  typescript
   java
   cpp
 }

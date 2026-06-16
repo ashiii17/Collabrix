@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const languageSchema = z.enum(["python", "javascript", "java", "cpp"]);
+export const languageSchema = z.enum(["python", "javascript", "typescript", "java", "cpp"]);
 export type Language = z.infer<typeof languageSchema>;
 
 export const roomModeSchema = z.enum(["collaboration", "interview", "contest"]);
