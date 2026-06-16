@@ -36,10 +36,19 @@ export const chatMessageSchema = z.object({
   kind: z.enum(["text", "code", "file"]).default("text")
 });
 
+export const loginUserSchema = z.object({
+  email: z.string().trim().email("Email must be valid.").toLowerCase(),
+  password: z.string().min(1, "Password is required."),
+});
+
 export type CreateRoomInput = z.infer<typeof createRoomSchema>;
 export type RegisterUserInput = z.infer<typeof registerUserSchema>;
+export type LoginUserInput = z.infer<typeof loginUserSchema>;
 export type CodeExecutionInput = z.infer<typeof codeExecutionSchema>;
 export type ChatMessageInput = z.infer<typeof chatMessageSchema>;
+
+export type AuthUser = { id: string; email: string; name: string };
+export type AuthResponse = { token: string; user: AuthUser };
 
 export type ReplayEventType =
   | "user.joined"
