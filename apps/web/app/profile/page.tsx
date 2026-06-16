@@ -92,7 +92,8 @@ export default function ProfilePage() {
     <main className="min-h-screen bg-[#f6f8fb] px-4 py-12">
       <div className="mx-auto w-full max-w-lg rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-          <div className="relative group">
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative group">
             {avatarSrc(profile) ? (
               <img src={avatarSrc(profile)!} alt="Avatar" className="h-20 w-20 rounded-full object-cover" />
             ) : (
@@ -106,9 +107,10 @@ export default function ProfilePage() {
               className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity"
             >Change</button>
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleAvatarUpload} />
-            {avatarSrc(profile) && (
-              <button type="button" onClick={handleRemoveAvatar} className="mt-1 text-xs text-red-500 hover:text-red-700">Remove</button>
-            )}
+          </div>
+          {avatarSrc(profile) && (
+            <button type="button" onClick={handleRemoveAvatar} className="text-xs text-red-500 hover:text-red-700">Remove photo</button>
+          )}
           </div>
           <div className="text-center sm:text-left">
             <h1 className="text-xl font-bold text-slate-900">{profile.name}</h1>
