@@ -1,4 +1,5 @@
 import http from "node:http";
+import path from "node:path";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -19,9 +20,10 @@ const io = new Server(server, {
   cors: { origin: env.WEB_ORIGIN, credentials: true }
 });
 
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
+app.use("/uploads", express.static(path.resolve(import.meta.dirname, "../uploads")));
 
 app.get("/health", (_req, res) => res.json({ ok: true, service: "collabrix-api" }));
 app.use("/auth", authRouter);

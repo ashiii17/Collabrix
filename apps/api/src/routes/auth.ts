@@ -1,8 +1,21 @@
 import { Router } from "express";
+import path from "node:path";
 import bcrypt from "bcryptjs";
+import multer from "multer";
 import { prisma } from "@collabrix/db";
 import { registerUserSchema, loginUserSchema, updateProfileSchema } from "@collabrix/shared";
 import { signToken, requireAuth } from "../middleware/auth.js";
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: path.resolve(import.meta.dirname, "../../uploads"),
+    filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    cb(null, /^image\/(jpeg|png|gif|webp)$/.test(file.mimetype));
+  },
+});
 
 export const authRouter = Router();
 
@@ -80,5 +93,18 @@ authRouter.patch("/profile", requireAuth, async (req, res) => {
   if (parsed.data.avatarUrl !== undefined) data.avatarUrl = parsed.data.avatarUrl || null;
 
   const user = await prisma.user.update({ where: { id: req.user!.id }, data, select: profileSelect });
+  res.json({ user });
+});
+
+authRouter.post("/avatar", requireAuth, upload.single("avatar"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No valid image file provided. Accepts jpeg, png, gif, webp (max 2MB)." });
+  }
+  const avatarUrl = `/uploads/${req.file.filename}`;
+  const user = await prisma.user.update({
+    where: { id: req.user!.id },
+    data: { avatarUrl },
+    select: { id: true, name: true, email: true, avatarUrl: true, createdAt: true },
+  });
   res.json({ user });
 });
