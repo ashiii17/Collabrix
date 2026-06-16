@@ -108,7 +108,7 @@ export default function ProfilePage() {
             >Change</button>
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleAvatarUpload} />
           </div>
-          {avatarSrc(profile) && (
+          {editing && avatarSrc(profile) && (
             <button type="button" onClick={handleRemoveAvatar} className="text-xs text-red-500 hover:text-red-700">Remove photo</button>
           )}
           </div>
