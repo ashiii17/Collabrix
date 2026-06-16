@@ -29,7 +29,7 @@ export default function ProfilePage() {
   }, [router]);
 
   function avatarSrc(p: Profile) {
-    if (!p.avatarUrl) return `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&size=80&background=6366f1&color=fff`;
+    if (!p.avatarUrl) return null;
     return p.avatarUrl.startsWith("/") ? `${API_URL}${p.avatarUrl}` : p.avatarUrl;
   }
 
@@ -79,7 +79,13 @@ export default function ProfilePage() {
       <div className="mx-auto w-full max-w-lg rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
           <div className="relative group">
-            <img src={avatarSrc(profile)} alt="Avatar" className="h-20 w-20 rounded-full object-cover" />
+            {avatarSrc(profile) ? (
+              <img src={avatarSrc(profile)!} alt="Avatar" className="h-20 w-20 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-500 text-2xl font-bold text-white">
+                {profile.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
