@@ -54,6 +54,20 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleRemoveAvatar() {
+    setFormError(""); setSuccess("");
+    try {
+      const r = await api<{ user: Profile }>("/auth/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ avatarUrl: "" }),
+      });
+      setProfile(r.user);
+      setSuccess("Avatar removed.");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to remove avatar");
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true); setFormError(""); setSuccess("");
@@ -92,6 +106,9 @@ export default function ProfilePage() {
               className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity"
             >Change</button>
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleAvatarUpload} />
+            {avatarSrc(profile) && (
+              <button type="button" onClick={handleRemoveAvatar} className="mt-1 text-xs text-red-500 hover:text-red-700">Remove</button>
+            )}
           </div>
           <div className="text-center sm:text-left">
             <h1 className="text-xl font-bold text-slate-900">{profile.name}</h1>
