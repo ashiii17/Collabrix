@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "@collabrix/db";
-import { registerUserSchema, loginUserSchema } from "@collabrix/shared";
+import { registerUserSchema, loginUserSchema, updateProfileSchema } from "@collabrix/shared";
 import { signToken, requireAuth } from "../middleware/auth.js";
 
 export const authRouter = Router();
@@ -58,5 +58,27 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   if (!user) {
     return res.status(404).json({ error: "User not found." });
   }
+  res.json({ user });
+});
+
+const profileSelect = { id: true, name: true, email: true, avatarUrl: true, createdAt: true };
+
+authRouter.get("/profile", requireAuth, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: profileSelect });
+  if (!user) return res.status(404).json({ error: "User not found." });
+  res.json({ user });
+});
+
+authRouter.patch("/profile", requireAuth, async (req, res) => {
+  const parsed = updateProfileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid input", issues: parsed.error.flatten().fieldErrors });
+  }
+
+  const data: Record<string, string | null> = {};
+  if (parsed.data.name !== undefined) data.name = parsed.data.name;
+  if (parsed.data.avatarUrl !== undefined) data.avatarUrl = parsed.data.avatarUrl || null;
+
+  const user = await prisma.user.update({ where: { id: req.user!.id }, data, select: profileSelect });
   res.json({ user });
 });

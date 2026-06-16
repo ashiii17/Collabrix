@@ -41,6 +41,12 @@ export const loginUserSchema = z.object({
   password: z.string().min(1, "Password is required."),
 });
 
+export const updateProfileSchema = z.object({
+  name: z.string().trim().min(2, "Name must be at least 2 characters.").max(80, "Name must be at most 80 characters.").optional(),
+  avatarUrl: z.string().url("Avatar must be a valid URL.").max(500).optional().or(z.literal("")),
+});
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type CreateRoomInput = z.infer<typeof createRoomSchema>;
 export type RegisterUserInput = z.infer<typeof registerUserSchema>;
 export type LoginUserInput = z.infer<typeof loginUserSchema>;
