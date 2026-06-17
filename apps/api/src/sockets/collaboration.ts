@@ -1,14 +1,21 @@
 import type { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import { prisma } from "@collabrix/db";
-import { chatMessageSchema } from "@collabrix/shared";
 import { env } from "../config/env.js";
-import { recordReplayEvent } from "../services/replay.js";
 import type { AuthUser } from "../middleware/auth.js";
 
 type AuthedSocket = Socket & { user?: AuthUser };
+type ConnectedUser = { socketId: string; userId: string; name: string; avatar: string | null; roomCode: string | null };
+
+// In-memory presence store
+const connectedUsers = new Map<string, ConnectedUser>();
+
+export function getActiveUsersForRoom(roomCode: string) {
+  return [...connectedUsers.values()].filter((u) => u.roomCode === roomCode).map(({ userId, name, avatar }) => ({ userId, name, avatar }));
+}
 
 export function registerCollaborationGateway(io: Server) {
+  // JWT auth middleware
   io.use((socket: AuthedSocket, next) => {
     const token = socket.handshake.auth.token as string | undefined;
     if (!token) return next(new Error("Unauthorized"));
@@ -21,46 +28,54 @@ export function registerCollaborationGateway(io: Server) {
   });
 
   io.on("connection", (socket: AuthedSocket) => {
-    socket.on("room:join", async ({ roomId }: { roomId: string }) => {
-      socket.join(roomId);
-      socket.to(roomId).emit("presence:joined", socket.user);
-      await recordReplayEvent({ roomId, userId: socket.user!.id, type: "user.joined", payload: socket.user });
+    const user = socket.user!;
+    connectedUsers.set(socket.id, { socketId: socket.id, userId: user.id, name: user.name, avatar: null, roomCode: null });
+
+    // Join room
+    socket.on("room:join", async ({ roomCode }: { roomCode: string }) => {
+      // Verify room exists
+      const room = await prisma.room.findUnique({ where: { slug: roomCode }, select: { id: true } });
+      if (!room) { socket.emit("error", { message: "Room not found" }); return; }
+
+      // Verify user is participant
+      const member = await prisma.roomMember.findUnique({ where: { roomId_userId: { roomId: room.id, userId: user.id } } });
+      if (!member) { socket.emit("error", { message: "Not a participant" }); return; }
+
+      // Get avatar
+      const profile = await prisma.user.findUnique({ where: { id: user.id }, select: { avatarUrl: true } });
+
+      // Update presence
+      const entry = connectedUsers.get(socket.id)!;
+      entry.roomCode = roomCode;
+      entry.avatar = profile?.avatarUrl ?? null;
+
+      socket.join(roomCode);
+
+      // Broadcast to others in room
+      socket.to(roomCode).emit("user:joined", { userId: user.id, name: user.name, avatar: entry.avatar });
+
+      // Send current active users to the joining client
+      socket.emit("room:users", getActiveUsersForRoom(roomCode));
     });
 
-    socket.on("editor:change", async ({ roomId, code, language, version }) => {
-      await prisma.room.update({ where: { id: roomId }, data: { code, language, version: { increment: 1 } } });
-      socket.to(roomId).emit("editor:change", { code, language, version, user: socket.user });
-      await recordReplayEvent({ roomId, userId: socket.user!.id, type: "code.changed", payload: { code, language, version } });
+    // Leave room
+    socket.on("room:leave", ({ roomCode }: { roomCode: string }) => {
+      socket.leave(roomCode);
+      const entry = connectedUsers.get(socket.id);
+      if (entry) entry.roomCode = null;
+      socket.to(roomCode).emit("user:left", { userId: user.id, name: user.name });
     });
 
-    socket.on("cursor:move", ({ roomId, cursor }) => {
-      socket.to(roomId).emit("cursor:move", { user: socket.user, cursor });
-    });
-
-    socket.on("chat:send", async (raw) => {
-      const input = chatMessageSchema.parse(raw);
-      const message = await prisma.chatMessage.create({
-        data: { roomId: input.roomId, userId: socket.user!.id, body: input.body, kind: input.kind },
-        include: { user: true }
-      });
-      io.to(input.roomId).emit("chat:message", message);
-      await recordReplayEvent({ roomId: input.roomId, userId: socket.user!.id, type: "chat.sent", payload: message });
-    });
-
-    socket.on("whiteboard:change", async ({ roomId, state }) => {
-      await prisma.room.update({ where: { id: roomId }, data: { whiteboardState: state } });
-      socket.to(roomId).emit("whiteboard:change", { state, user: socket.user });
-      await recordReplayEvent({ roomId, userId: socket.user!.id, type: "whiteboard.changed", payload: state });
-    });
-
-    socket.on("webrtc:offer", ({ roomId, targetId, offer }) => socket.to(roomId).emit("webrtc:offer", { from: socket.id, targetId, offer }));
-    socket.on("webrtc:answer", ({ roomId, targetId, answer }) => socket.to(roomId).emit("webrtc:answer", { from: socket.id, targetId, answer }));
-    socket.on("webrtc:ice", ({ roomId, targetId, candidate }) => socket.to(roomId).emit("webrtc:ice", { from: socket.id, targetId, candidate }));
-
+    // Disconnect
     socket.on("disconnecting", () => {
-      for (const roomId of socket.rooms) {
-        if (roomId !== socket.id) socket.to(roomId).emit("presence:left", socket.user);
+      const entry = connectedUsers.get(socket.id);
+      if (entry?.roomCode) {
+        socket.to(entry.roomCode).emit("user:left", { userId: user.id, name: user.name });
       }
+    });
+
+    socket.on("disconnect", () => {
+      connectedUsers.delete(socket.id);
     });
   });
 }

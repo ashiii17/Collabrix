@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { prisma } from "@collabrix/db";
 import { createRoomSchema } from "@collabrix/shared";
 import { requireAuth } from "../middleware/auth.js";
+import { getActiveUsersForRoom } from "../sockets/collaboration.js";
 
 export const roomsRouter = Router();
 
@@ -107,6 +108,13 @@ roomsRouter.patch("/:roomCode/code", async (req, res) => {
 
   const updated = await prisma.room.update({ where: { id: room.id }, data, select: { code: true, language: true } });
   res.json(updated);
+});
+
+// Get active (online) users in room
+roomsRouter.get("/:roomCode/active", async (req, res) => {
+  const room = await prisma.room.findUnique({ where: { slug: req.params.roomCode }, select: { id: true } });
+  if (!room) return res.status(404).json({ error: "Room not found." });
+  res.json({ users: getActiveUsersForRoom(req.params.roomCode) });
 });
 
 // Get room by roomCode (slug)
