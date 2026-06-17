@@ -78,6 +78,37 @@ roomsRouter.get("/:roomCode/participants", async (req, res) => {
   res.json({ participants });
 });
 
+// Get room code
+roomsRouter.get("/:roomCode/code", async (req, res) => {
+  const room = await prisma.room.findUnique({ where: { slug: req.params.roomCode }, select: { id: true, code: true, language: true } });
+  if (!room) return res.status(404).json({ error: "Room not found." });
+
+  const member = await prisma.roomMember.findUnique({ where: { roomId_userId: { roomId: room.id, userId: req.user!.id } } });
+  if (!member) return res.status(403).json({ error: "You are not a participant of this room." });
+
+  res.json({ code: room.code, language: room.language });
+});
+
+// Update room code
+roomsRouter.patch("/:roomCode/code", async (req, res) => {
+  const { code, language } = req.body;
+  const room = await prisma.room.findUnique({ where: { slug: req.params.roomCode }, select: { id: true } });
+  if (!room) return res.status(404).json({ error: "Room not found." });
+
+  const member = await prisma.roomMember.findUnique({ where: { roomId_userId: { roomId: room.id, userId: req.user!.id } } });
+  if (!member) return res.status(403).json({ error: "You are not a participant of this room." });
+
+  const validLangs = ["javascript", "typescript", "python", "java", "cpp"];
+  if (language && !validLangs.includes(language)) return res.status(400).json({ error: "Invalid language." });
+
+  const data: Record<string, string> = {};
+  if (typeof code === "string") data.code = code;
+  if (language) data.language = language;
+
+  const updated = await prisma.room.update({ where: { id: room.id }, data, select: { code: true, language: true } });
+  res.json(updated);
+});
+
 // Get room by roomCode (slug)
 roomsRouter.get("/:roomCode", async (req, res) => {
   const room = await prisma.room.findUnique({
