@@ -9,18 +9,23 @@ type Room = {
   id: string; slug: string; name: string; language: string; createdAt: string; updatedAt: string;
   owner: { id: string; name: string; email: string; avatarUrl: string | null };
 };
+type Participant = { id: string; name: string; avatar: string | null; role: string; joinedAt: string };
 
 export default function RoomDetailPage() {
   const { roomCode } = useParams<{ roomCode: string }>();
   const router = useRouter();
   const [room, setRoom] = useState<Room | null>(null);
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!getToken()) { router.push("/login"); return; }
-    api<{ room: Room }>(`/rooms/${roomCode}`)
-      .then((r) => setRoom(r.room))
+    Promise.all([
+      api<{ room: Room }>(`/rooms/${roomCode}`),
+      api<{ participants: Participant[] }>(`/rooms/${roomCode}/participants`),
+    ])
+      .then(([r, p]) => { setRoom(r.room); setParticipants(p.participants); })
       .catch((e) => setError(e instanceof Error ? e.message : "Room not found"))
       .finally(() => setLoading(false));
   }, [roomCode, router]);
@@ -49,12 +54,33 @@ export default function RoomDetailPage() {
             <div>
               <p className="text-xs uppercase text-slate-500">Owner</p>
               <p className="mt-1 font-medium text-slate-900">{room.owner.name}</p>
-              <p className="text-xs text-slate-500">{room.owner.email}</p>
             </div>
             <div>
-              <p className="text-xs uppercase text-slate-500">Last Updated</p>
-              <p className="mt-1 font-medium text-slate-900">{new Date(room.updatedAt).toLocaleString()}</p>
+              <p className="text-xs uppercase text-slate-500">Participants</p>
+              <p className="mt-1 font-medium text-slate-900">{participants.length}</p>
             </div>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-5 py-4 font-bold text-slate-900">Participants ({participants.length})</div>
+          <div className="divide-y divide-slate-100">
+            {participants.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 px-5 py-3">
+                {p.avatar ? (
+                  <img src={p.avatar.startsWith("/") ? `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}${p.avatar}` : p.avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500 text-xs font-bold text-white">
+                    {p.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-slate-900">{p.name}</p>
+                  <p className="text-xs text-slate-500">{p.role} · Joined {new Date(p.joinedAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+            ))}
+            {participants.length === 0 && <p className="px-5 py-4 text-sm text-slate-500">No participants yet.</p>}
           </div>
         </div>
       </div>

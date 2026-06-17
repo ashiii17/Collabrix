@@ -7,10 +7,12 @@ import { Button } from "../../components/Button";
 import { api, getToken } from "../../lib/api";
 
 type Room = { id: string; slug: string; name: string; language: string; createdAt: string };
+type Stats = { roomsCreated: number; totalSessions: number };
 
 export default function DashboardPage() {
   const router = useRouter();
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [stats, setStats] = useState<Stats>({ roomsCreated: 0, totalSessions: 0 });
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -18,8 +20,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!getToken()) { router.push("/login"); return; }
-    api<{ rooms: Room[] }>("/rooms")
-      .then((r) => setRooms(r.rooms))
+    Promise.all([
+      api<{ rooms: Room[] }>("/rooms"),
+      api<{ stats: Stats }>("/dashboard"),
+    ])
+      .then(([r, d]) => { setRooms(r.rooms); setStats(d.stats); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [router]);
@@ -49,13 +54,20 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
           <div className="flex gap-3">
             <Link href="/profile" className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Profile</Link>
+            <Link href="/join" className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Join Room</Link>
             <Button onClick={() => setShowForm(!showForm)}>{showForm ? "Cancel" : "Create Room"}</Button>
           </div>
         </div>
 
-        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
-          <p className="text-sm text-slate-500">Total Rooms</p>
-          <p className="text-3xl font-bold text-slate-900">{rooms.length}</p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <p className="text-sm text-slate-500">Rooms Owned</p>
+            <p className="text-3xl font-bold text-slate-900">{stats.roomsCreated}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <p className="text-sm text-slate-500">Rooms Joined</p>
+            <p className="text-3xl font-bold text-slate-900">{stats.totalSessions}</p>
+          </div>
         </div>
 
         {showForm && (
@@ -75,7 +87,7 @@ export default function DashboardPage() {
         )}
 
         <div className="mt-6 rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 px-5 py-4 font-bold text-slate-900">Recent Rooms</div>
+          <div className="border-b border-slate-200 px-5 py-4 font-bold text-slate-900">Your Rooms</div>
           <div className="divide-y divide-slate-100">
             {rooms.map((room) => (
               <Link key={room.id} href={`/room/${room.slug}`} className="flex items-center justify-between px-5 py-4 hover:bg-slate-50">
