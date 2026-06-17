@@ -28,8 +28,12 @@ export default function RoomPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [error, setError] = useState("");
-  const socketJoined = useRef(false);
 
+  const isRemote = useRef(false);
+  const emitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
+
+  // Load initial data
   useEffect(() => {
     if (!getToken()) { router.push("/login"); return; }
     Promise.all([
@@ -47,27 +51,70 @@ export default function RoomPage() {
       .finally(() => setLoading(false));
   }, [roomCode, router]);
 
-  // Socket connection + presence
+  // Socket connection, presence, and code sync
   useEffect(() => {
-    if (!room || socketJoined.current) return;
+    if (!room) return;
     const socket = getSocket();
+    socketRef.current = socket;
 
     socket.emit("room:join", { roomCode });
-    socketJoined.current = true;
 
+    // Presence
     socket.on("room:users", (users: OnlineUser[]) => setOnlineUsers(users));
     socket.on("user:joined", (user: OnlineUser) => setOnlineUsers((prev) => prev.some(u => u.userId === user.userId) ? prev : [...prev, user]));
     socket.on("user:left", ({ userId }: { userId: string }) => setOnlineUsers((prev) => prev.filter(u => u.userId !== userId)));
+
+    // Remote code changes
+    socket.on("code:change", ({ code: remoteCode }: { code: string }) => {
+      isRemote.current = true;
+      setCode(remoteCode);
+    });
+
+    // Remote language changes
+    socket.on("language:change", ({ language: remoteLang }: { language: string }) => {
+      isRemote.current = true;
+      setLanguage(remoteLang);
+    });
+
+    // Reconnection recovery
+    socket.on("connect", () => {
+      socket.emit("room:join", { roomCode });
+      api<{ code: string; language: string }>(`/rooms/${roomCode}/code`).then((c) => {
+        isRemote.current = true;
+        setCode(c.code);
+        setLanguage(c.language);
+      }).catch(() => {});
+    });
 
     return () => {
       socket.emit("room:leave", { roomCode });
       socket.off("room:users");
       socket.off("user:joined");
       socket.off("user:left");
-      socketJoined.current = false;
+      socket.off("code:change");
+      socket.off("language:change");
+      socket.off("connect");
       disconnectSocket();
     };
   }, [room, roomCode]);
+
+  // Handle local code changes — debounced emit
+  const handleCodeChange = useCallback((newCode: string) => {
+    setCode(newCode);
+    if (isRemote.current) { isRemote.current = false; return; }
+
+    if (emitTimer.current) clearTimeout(emitTimer.current);
+    emitTimer.current = setTimeout(() => {
+      socketRef.current?.emit("code:change", { roomCode, code: newCode });
+    }, 100);
+  }, [roomCode]);
+
+  // Handle local language change — emit immediately
+  const handleLanguageChange = useCallback((lang: string) => {
+    setLanguage(lang);
+    if (isRemote.current) { isRemote.current = false; return; }
+    socketRef.current?.emit("language:change", { roomCode, language: lang });
+  }, [roomCode]);
 
   const handleSave = useCallback(async () => {
     setSaving(true); setSaveMsg("");
@@ -87,7 +134,6 @@ export default function RoomPage() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      {/* Header */}
       <header className="flex items-center justify-between border-b border-slate-700 bg-[#1e1e1e] px-4 py-2">
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="text-sm text-slate-400 hover:text-white">← Dashboard</Link>
@@ -95,7 +141,7 @@ export default function RoomPage() {
           <span className="font-mono text-xs text-slate-500">{room.slug}</span>
         </div>
         <div className="flex items-center gap-3">
-          <select value={language} onChange={(e) => setLanguage(e.target.value)} className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white">
+          <select value={language} onChange={(e) => handleLanguageChange(e.target.value)} className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white">
             {LANGUAGES.map((l) => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
           </select>
           <button onClick={handleSave} disabled={saving} className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
@@ -105,9 +151,7 @@ export default function RoomPage() {
         </div>
       </header>
 
-      {/* Body */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Participants Panel */}
         <aside className="hidden w-56 flex-shrink-0 overflow-y-auto border-r border-slate-700 bg-[#252526] p-3 md:block">
           <p className="text-xs font-bold uppercase text-slate-400">Participants ({participants.length})</p>
           <div className="mt-3 space-y-2">
@@ -132,9 +176,8 @@ export default function RoomPage() {
           </div>
         </aside>
 
-        {/* Editor */}
         <main className="flex-1">
-          <CodeEditor value={code} language={language} onChange={setCode} />
+          <CodeEditor value={code} language={language} onChange={handleCodeChange} />
         </main>
       </div>
     </div>
